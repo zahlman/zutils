@@ -1,120 +1,102 @@
 import glob, string, subprocess, sys
+import toml
 
 
-PRERELEASE_ALLOWED = ''.join((
-    string.ascii_uppercase, string.ascii_lowercase, string.digits, '.-'
-))
-
-
-def build_number():
-    # Let the exception fall through if git is not available.
+def get_build():
     return subprocess.check_output(
         ('git', 'rev-list', 'head', '--count')
     ).decode('utf-8').strip()
 
 
-def parse_version(s):
-    s, _,  build = s.partition('+')
-    s, _, prerelease = s.partition('-')
-    major, minor, patch = s.split('.')
-    return int(major), int(minor), int(patch), prerelease, build
+def poetry_version(rule):
+    return subprocess.check_output(
+        ('poetry', 'version', rule), shell=True
+    ).decode('utf-8').split()[-1]
 
 
-def format_version(major, minor, patch, prerelease, build):
-    p = '-' if prerelease else ''
-    b = '+' if build else ''
-    return f'{major}.{minor}.{patch}{p}{prerelease}{b}{build}'
+def fix_toml(version):
+    with open('pyproject.toml') as src:
+        data = toml.load(src)
+    data['tool']['poetry']['version'] = version
+    with open('pyproject.toml', 'w') as dest:
+        toml.dump(data, dest)
 
 
-def bump(data, how, update_build):
-    major, minor, patch, prerelease, build = data
-    # If build numbers are used, update on every kind of bump.
-    build = build_number() if update_build else ''
-    if how == 'major':
-        major, minor, patch, prerelease = major + 1, 0, 0, ''
-    elif how == 'minor':
-        minor, patch, prerelease = minor + 1, 0, ''
-    elif how == 'patch':
-        patch, prerelease = patch + 1, ''
-    elif how == 'final':
-        prerelease = '' # since we can't specify that directly
-    elif how is not None:
-        prerelease = ''.join(x for x in how if x in PRERELEASE_ALLOWED)
-    return major, minor, patch, prerelease, build
-
-
-# Look for a quoted string on a line that starts with the tag.
-# A semver string can't contain quotes, so parsing is simple.
-def get_version(filename, tag):
-    with open(filename) as source:
-        for line in source:
-            if line.startswith(tag):
-                return line.split('"')[1]
-    return '0.1.0' # probably the most sensible default
-
-
-# attempt to replace the version in the file. Very naive to contents.
-def set_version(filename, tag, version):
+# attempt to replace assignments to __version__ in the source file.
+def set_version(filename, version_text):
     with open(filename) as source:
         data = [
-            f'{tag} = "{version}"\n' if line.startswith(tag) else line
-            for line in source 
+            f'__version__ = "{version_text}"\n'
+            if line.startswith('__version__')
+            else line
+            for line in source
         ]
     with open(filename, 'w') as dest:
         dest.writelines(data)
 
 
 def update_version(bump_method, update_build):
-    version_text = get_version('pyproject.toml', 'version')
-    version = bump(parse_version(version_text), bump_method, update_build)
-    version_text = format_version(*version)
-    print(f'Updating to version {version_text}.')
-    set_version('pyproject.toml', 'version', version_text)
+    with open('pyproject.toml') as src:
+        old_version = toml.load(src)['tool']['poetry']['version']
+    old_version, old_plus, old_build = old_version.partition('+')
+    if not bump_method:
+        new_version, plus, build = old_version, old_plus, old_build
+    else:
+        try:
+            new_version = poetry_version(bump_method)
+            new_version, plus, build = new_version.partition('+')
+        except subprocess.CalledProcessError:
+            print('Failed.')
+            return
+    if update_build == 'build':
+        plus, build = '+', get_build()
+    elif update_build == '':
+        plus, build = old_plus, old_build
+    # if update_build == 'nobuild', the build was already stripped by Poetry.
+    fixed_version = f'{new_version}{plus}{build}'
+    if fixed_version != new_version:
+        fix_toml(fixed_version)
     # recursively search, but ignore the current folder
     for src in glob.glob('**/*.py'):
-        set_version(src, '__version__', version_text)
+        set_version(src, fixed_version)
+    return fixed_version
 
 
 usage = [
-    'usage:',
-    '    bump_version major [nobuild]',
-    '    -> updates to next major version and clears prerelease string.',
-    '    bump_version minor [nobuild]',
-    '    -> updates to next minor version and clears prerelease string.',
-    '    bump_version patch [nobuild]',
-    '    -> updates to next patch version and clears prerelease string.',
-    '    bump_version final [nobuild]',
-    '    -> clears prerelease string.',
-    '    bump_version <prerelease> [nobuild]',
-    '    -> updates to next major version and clears prerelease string.',
-    '    bump_version nobuild',
-    '    -> clears build number.',
-    '    bump_version build',
-    '    -> updates build number only.',
-    'For commands other than `build`, if `nobuild` is specified,',
-    'the build number will be cleared; otherwise, it is updated.',
-    'Please see https://semver.org for more information.'
+    'usage: bump_version [<version>] [build | nobuild]',
+    '',
+    'Invokes `poetry version <version>` (if specified), then cleans up.',
+    'If `build` is specified and there is no build string, one is added;',
+    'if `nobuild` is specified, any existing build string is removed;',
+    'otherwise, the previous build string (if any) is preserved.',
+    'All source files are searched for lines that start with `__version__`',
+    'and these are replaced with an assignment of the new version string.'
 ]
+
+
+def _is_build_arg(arg):
+    return arg in {'build', 'nobuild'}
 
 
 if __name__ == '__main__':
     try:
-        progname, method, *nobuild = sys.argv
-        if method == 'build':
-            if nobuild:
+        program, *args = sys.argv
+        if len(args) > 2:
+            raise ValueError # extra args
+        elif len(args) == 2:
+            version, build = args
+            if not _is_build_arg(build):
                 raise ValueError
-            method, update_build = None, True
-        elif method == 'nobuild':
-            if nobuild:
-                raise ValueError
-            method, update_build = None, False
-        elif nobuild == []:
-            update_build = True
-        elif nobuild == ['nobuild']:
-            update_build = False
+        elif len(args) == 1:
+            arg = args[0]
+            version, build = ('', arg) if _is_build_arg(arg) else (arg, '')
         else:
-            raise ValueError
+            assert len(args) == 0
+            version, build = '', ''
     except:
         print(*usage, sep='\n')
     else:
-        update_version(method, update_build)
+        result = update_version(version, build)
+        print(f'Version is now {result}.')
+        print('You may want to `git add .` and `git commit --amend`')
+        print('the changes, if any. Also consider making a tag.')
