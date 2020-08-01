@@ -37,6 +37,7 @@ def main(projectname=None, *_):
         return
     copy('py_gitignore.txt', projectname, '.gitignore')
     copy('local_gitignore.txt', projectname, 'local', '.gitignore')
+    copy('bump_version.py', projectname, 'local', 'bump_version.py')
     os.chdir(projectname)
     cmd('git', 'add', '.')
     cmd('git', 'commit', '-m', 'Initial commit')
