@@ -1,27 +1,9 @@
-import os, string, subprocess, sys
+import os, shutil, string, subprocess, sys
 
 
+HERE = os.path.split(os.path.abspath(__file__))[0]
 ALLOWED = string.ascii_lowercase + '-_'
 GOOD_START = tuple(string.ascii_lowercase)
-
-
-PY_GITIGNORE = [
-    '# Byte-compiled / optimized / DLL files',
-    '__pycache__/',
-    '*.py[cod]',
-    '',
-    '# gVim',
-    '*.swp',
-    '*~',
-    '',
-    '# pip',
-    '*.egg-info'
-]
-
-
-# Things stored in `local/` will be ignored by git, while the main
-# .gitignore doesn't need updating.
-LOCAL_GITIGNORE = ['*']
 
 
 def valid(name):
@@ -36,12 +18,9 @@ def cmd(*args, shell=False):
         return False
 
 
-def write(template, filename, *folders):
-    path = os.path.join(*folders)
-    os.makedirs(path, exist_ok=True)
-    with open(os.path.join(path, filename), 'w') as f:
-        for line in template:
-            f.write(line + '\n')
+def copy(srcname, *dstpath):
+    os.makedirs(os.path.join(*dstpath[:-1]), exist_ok=True)
+    shutil.copy(os.path.join(HERE, srcname), os.path.join(*dstpath))
 
 
 def main(projectname=None, *_):
@@ -51,12 +30,13 @@ def main(projectname=None, *_):
         print('Invalid project name. Aborting.')
         return
     if not cmd('poetry', 'new', projectname, shell=True):
-        print('Poetry not available. Will attempt git setup anyway.')
-    if not cmd('git', 'init', projectname):
-        print('Git not available. Bailing out.')
+        print('Poetry not available, or project already exists. Aborting.')
         return
-    write(PY_GITIGNORE, '.gitignore', projectname)
-    write(LOCAL_GITIGNORE, '.gitignore', projectname, 'local')
+    if not cmd('git', 'init', projectname):
+        print('Git not available. Aborting.')
+        return
+    copy('py_gitignore.txt', projectname, '.gitignore')
+    copy('local_gitignore.txt', projectname, 'local', '.gitignore')
     os.chdir(projectname)
     cmd('git', 'add', '.')
     cmd('git', 'commit', '-m', 'Initial commit')
