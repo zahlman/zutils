@@ -21,7 +21,7 @@ you will be prompted for it interactively. The script will:
 
 # `bump_version.py`
 
-The `bump_version.py` script is a wrapper for `poetry version`. It accepts all the arguments that `poetry version` does, as well as `build` and `nobuild` flags (which can also be specified by themselves`. This lets you add or remove a build identifier from the version number (by default, the old build string is kept if there was one, or left off if there wasn't). When a build identifier is added, it is determined as the total number of commits in the git repository (as computed by `git rev-list head --count`).
+The `bump_version.py` script is a wrapper for `poetry version`. It accepts all the arguments that `poetry version` does, as well as `build` and `nobuild` flags (which can also be specified by themselves). This lets you add or remove a build identifier from the version number (by default, the old build string is kept if there was one, or left off if there wasn't). When a build identifier is added, it is determined as the total number of commits in the git repository (as computed by `git rev-list head --count`).
 
 When the script is run, in addition to updating `pyproject.toml`, it will recursively search for lines starting with `__version__` in your `.py` source files, and replace them with `__version__ == <version number>`. This happens regardless of the arguments provided; you can run the script with no arguments to apply this fix without changing the version number.
 
