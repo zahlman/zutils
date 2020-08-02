@@ -1,6 +1,10 @@
 These are a couple of utilities I find useful for starting new Python projects
 with Poetry and git. No installation is expected or required; just put this folder in a place where you keep other project folders.
 
+# Dependencies
+
+Git and Poetry need to be available, and `bump_version.py` uses the `toml` package to parse `pyproject.toml` (you should be quite familiar with this already if you are using Poetry). Otherwise only the standard library is used.
+
 # `new_project.py`
 
 To start a new project, run `zutils/new_project.py`.
@@ -13,6 +17,7 @@ you will be prompted for it interactively. The script will:
 * Set up an initial project-wide `.gitignore`, as well as a `local/` subdirectory with its own `.gitignore` that ignores everything. The idea is that you can keep private, project-related data in this folder (e.g., source code from another project used for reference, or temporary data for informal acceptance testing) without a record of its existence in the project .gitignore.
 * Copy `bump_version.py` to the `local/` folder (making it easier to use).
 * Make an initial `git commit` with this content.
+
 
 # `bump_version.py`
 
