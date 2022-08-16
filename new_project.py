@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import os, shutil, string, subprocess, sys
 
 
@@ -29,7 +30,10 @@ def main(projectname=None, *_):
     if not valid(projectname):
         print('Invalid project name. Aborting.')
         return
-    if not cmd('poetry', 'new', projectname, shell=True):
+    # On Windows, `shell=True` is necessary because it's a batch script.
+    # On Linux, not only is that not apparently necessary for shell scripts,
+    # but it messes up when the input is pre-tokenized.
+    if not cmd('poetry', 'new', projectname, shell=(os.name == 'nt')):
         print('Poetry not available, or project already exists. Aborting.')
         return
     if not cmd('git', 'init', projectname):
